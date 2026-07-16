@@ -1,0 +1,19 @@
+# Secrets / config
+.env
+
+# Data (raw pulls and processed outputs — may contain PII)
+data/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

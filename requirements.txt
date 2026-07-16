@@ -1,0 +1,10 @@
+requests>=2.31
+python-dotenv>=1.0
+pandas>=2.0
+pyarrow>=14.0
+beautifulsoup4>=4.12
+matplotlib>=3.7
+seaborn>=0.13
+tqdm>=4.66
+streamlit>=1.30
+plotly>=5.18
