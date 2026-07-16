@@ -7,8 +7,8 @@ re-run, so an interrupted pull can simply be restarted without losing work.
 
 Usage examples::
 
-    python -m src.extract --modules requests,problems --limit 20 --skip-details
-    python -m src.extract                      # everything, with full details
+    python -m pipeline.extract --modules requests,problems --limit 20 --skip-details
+    python -m pipeline.extract                      # everything, with full details
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from typing import Dict, List, Optional
 from tqdm import tqdm
 
 import config
-from src.sdp_client import SDPClient
+from pipeline.sdp_client import SDPClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("extract")

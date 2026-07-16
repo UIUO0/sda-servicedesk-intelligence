@@ -6,7 +6,7 @@ reports label quality and recommends which ML target is realistic to start with.
 
 Usage::
 
-    python -m src.eda
+    python -m insights.eda
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("eda")
 
 sns.set_theme(style="whitegrid")
-EDA_DIR = config.PROCESSED_DIR / "eda"
+EDA_DIR = config.INSIGHTS_DIR
 
 
 def load_table(module: str) -> Optional[pd.DataFrame]:

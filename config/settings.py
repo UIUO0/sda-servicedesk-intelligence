@@ -11,10 +11,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Project layout ------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parent
+# settings.py lives in <root>/config/, so the root is two levels up.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
+INSIGHTS_DIR = PROJECT_ROOT / "insights"
+MODELS_DIR = PROJECT_ROOT / "models"
 
 # Load .env sitting next to this file (if present). Real env vars win over it.
 load_dotenv(PROJECT_ROOT / ".env")

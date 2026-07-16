@@ -1,6 +1,6 @@
 """Neon operational dashboard for ServiceDesk Plus data (Streamlit + Plotly).
 
-Reads the processed tables written by :mod:`src.preprocess` and presents
+Reads the processed tables written by :mod:`pipeline.preprocess` and presents
 operational KPIs and interactive charts with an animated neon theme.
 
 Run with::
@@ -20,7 +20,7 @@ import pandas as pd
 import plotly.express as px
 
 import config
-from src.dashboard_theme import (
+from insights.dashboard_theme import (
     CATEGORICAL,
     CUSTOM_CSS,
     STATUS,
@@ -162,7 +162,7 @@ def _run() -> None:
 
     requests = load_table("requests")
     if requests is None or requests.empty:
-        st.warning("No processed data found. Run the extractor then `python -m src.preprocess`.")
+        st.warning("No processed data found. Run the extractor then `python -m pipeline.preprocess`.")
         return
 
     tab_req, tab_prob, tab_chg, tab_proj, tab_sol = st.tabs(
@@ -224,7 +224,7 @@ def _run() -> None:
     with tab_prob:
         problems = load_table("problems")
         if problems is None or problems.empty:
-            st.info("No problems data yet. Run `python -m src.extract --modules problems` then preprocess.")
+            st.info("No problems data yet. Run `python -m pipeline.extract --modules problems` then preprocess.")
         else:
             resolved = int(problems["status"].isin(CLOSED_STATUSES).sum()) if "status" in problems else 0
             has_res = problems["has_resolution"].fillna(False).mean() * 100 if "has_resolution" in problems else 0
@@ -249,7 +249,7 @@ def _run() -> None:
     def generic_tab(module: str, label: str) -> None:
         table = load_table(module)
         if table is None or table.empty:
-            st.info(f"No {label} data yet. Run `python -m src.extract --modules {module}` then preprocess.")
+            st.info(f"No {label} data yet. Run `python -m pipeline.extract --modules {module}` then preprocess.")
             return
         kpi_row([("Total", f"{len(table):,}", "cyan"),
                  ("Columns", f"{table.shape[1]:,}", "purple")])

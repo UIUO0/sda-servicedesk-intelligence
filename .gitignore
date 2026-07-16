@@ -1,8 +1,17 @@
 # Secrets / config
 .env
 
-# Data (raw pulls and processed outputs — may contain PII)
+# Data (raw pulls and processed outputs — contain real PII: names, emails, phones)
 data/
+
+# Raw API response dumps anywhere in the tree (PII). Keep .env.example etc. tracked.
+apiResponse*.json
+*_raw.json
+
+# Generated insight artefacts (may embed PII in labels)
+insights/*.png
+insights/summary.md
+insights/eda_summary.md
 
 # Python
 venv/

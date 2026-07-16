@@ -1,15 +1,15 @@
 """Preprocess raw SDP JSON into flat, ML-ready tables (CSV + Parquet).
 
-Turns the nested API payloads written by :mod:`src.extract` into one tidy
+Turns the nested API payloads written by :mod:`pipeline.extract` into one tidy
 DataFrame per module. The small, reusable helpers at the top (epoch parsing,
 person flattening, HTML cleaning, language detection) are shared across every
 module's row builder.
 
 Usage examples::
 
-    python -m src.preprocess                       # process everything in data/raw/
-    python -m src.preprocess --modules requests problems
-    python -m src.preprocess --sample "apiResponse (1).json:requests" \\
+    python -m pipeline.preprocess                       # process everything in data/raw/
+    python -m pipeline.preprocess --modules requests problems
+    python -m pipeline.preprocess --sample "apiResponse (1).json:requests" \\
                              --sample "apiResponse.json:problems"
 """
 from __future__ import annotations
@@ -25,6 +25,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 import config
+from pipeline.anonymize import Anonymizer, anonymize_frame
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("preprocess")
@@ -280,10 +281,10 @@ def build_dataframe(module: str, records: List[Dict[str, Any]], *, enrich: bool)
     return df
 
 
-def save_dataframe(df: pd.DataFrame, module: str) -> None:
+def save_dataframe(df: pd.DataFrame, module: str, *, suffix: str = "") -> None:
     config.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    csv_path = config.PROCESSED_DIR / f"{module}.csv"
-    parquet_path = config.PROCESSED_DIR / f"{module}.parquet"
+    csv_path = config.PROCESSED_DIR / f"{module}{suffix}.csv"
+    parquet_path = config.PROCESSED_DIR / f"{module}{suffix}.parquet"
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
     try:
         df.to_parquet(parquet_path, index=False)
@@ -298,6 +299,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--modules", nargs="*", default=None,
         help="Modules to process from data/raw/. Defaults to all present.",
+    )
+    parser.add_argument(
+        "--anonymize", action="store_true",
+        help="Also write *_anon tables with names/emails replaced by surrogate IDs "
+             "and phones dropped. Use these for anything leaving this machine.",
     )
     parser.add_argument(
         "--sample", action="append", default=[],
@@ -318,6 +324,13 @@ def _discover_modules() -> List[str]:
 
 def main(argv: Optional[List[str]] = None) -> None:
     args = parse_args(argv)
+    anon = Anonymizer() if args.anonymize else None
+
+    def emit(df: pd.DataFrame, module: str) -> None:
+        """Write the identifiable table plus, when asked, an anonymised twin."""
+        save_dataframe(df, module)
+        if anon is not None:
+            save_dataframe(anonymize_frame(df, anon), module, suffix="_anon")
 
     if args.sample:
         for spec in args.sample:
@@ -326,21 +339,24 @@ def main(argv: Optional[List[str]] = None) -> None:
             if not path.is_absolute():
                 path = config.PROJECT_ROOT / path
             records = load_sample_records(path, module)
-            df = build_dataframe(module, records, enrich=False)
-            save_dataframe(df, module)
-        return
+            emit(build_dataframe(module, records, enrich=False), module)
+    else:
+        modules = args.modules or _discover_modules()
+        if not modules:
+            logger.warning("No modules found under %s. Run the extractor first.", config.RAW_DIR)
+            return
+        for module in modules:
+            records = load_raw_records(module)
+            if not records:
+                logger.warning("No records for %s; skipping", module)
+                continue
+            emit(build_dataframe(module, records, enrich=True), module)
 
-    modules = args.modules or _discover_modules()
-    if not modules:
-        logger.warning("No modules found under %s. Run the extractor first.", config.RAW_DIR)
-        return
-    for module in modules:
-        records = load_raw_records(module)
-        if not records:
-            logger.warning("No records for %s; skipping", module)
-            continue
-        df = build_dataframe(module, records, enrich=True)
-        save_dataframe(df, module)
+    if anon is not None:
+        map_path = config.PROCESSED_DIR / ".anon_map.json"
+        anon.save_map(map_path)
+        logger.info("Anonymised twins written (*_anon). Re-identification map -> %s "
+                    "(git-ignored; never share it alongside the anon tables).", map_path)
 
 
 if __name__ == "__main__":
