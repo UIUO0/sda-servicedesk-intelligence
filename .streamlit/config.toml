@@ -1,0 +1,75 @@
+# Enterprise theme — shadcn/zinc-inspired: minimal, neutral, accessible.
+# Typography, radius and chart palettes are global-only options and live in
+# [theme]; the light/dark sections carry colour overrides only.
+# Chart colors come from a CVD-validated categorical palette (dataviz skill).
+
+[theme]
+base = "light"
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+codeFontSize = "0.875rem"
+baseFontSize = 14
+baseFontWeight = 400
+headingFontSizes = ["28px", "22px", "18px", "16px", "14px", "12px"]
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+linkUnderline = false
+baseRadius = "6px"
+buttonRadius = "6px"
+showWidgetBorder = true
+showSidebarBorder = true
+chartCategoricalColors = ["#2A78D6", "#008300", "#E87BA4", "#EDA100", "#1BAF7A", "#EB6834", "#4A3AA7", "#E34948"]
+chartSequentialColors = ["#CDE2FB", "#B7D3F6", "#9EC5F4", "#86B6EF", "#6DA7EC", "#5598E7", "#3987E5", "#2A78D6", "#256ABF", "#1C5CAB"]
+
+[theme.light]
+primaryColor = "#18181B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#FAFAFA"
+codeBackgroundColor = "#F4F4F5"
+textColor = "#09090B"
+linkColor = "#18181B"
+borderColor = "#E4E4E7"
+codeTextColor = "#18181B"
+grayColor = "#71717A"
+blueColor = "#2A78D6"
+greenColor = "#1A7F37"
+redColor = "#CF222E"
+yellowColor = "#BF8700"
+orangeColor = "#EB6834"
+violetColor = "#4A3AA7"
+dataframeBorderColor = "#E4E4E7"
+dataframeHeaderBackgroundColor = "#FAFAFA"
+
+[theme.light.sidebar]
+backgroundColor = "#FAFAFA"
+secondaryBackgroundColor = "#F4F4F5"
+codeBackgroundColor = "#E4E4E7"
+textColor = "#09090B"
+borderColor = "#E4E4E7"
+primaryColor = "#18181B"
+
+[theme.dark]
+primaryColor = "#E4E4E7"
+backgroundColor = "#09090B"
+secondaryBackgroundColor = "#18181B"
+codeBackgroundColor = "#18181B"
+textColor = "#FAFAFA"
+linkColor = "#E4E4E7"
+borderColor = "#27272A"
+codeTextColor = "#E4E4E7"
+grayColor = "#A1A1AA"
+blueColor = "#3987E5"
+greenColor = "#22C55E"
+redColor = "#E66767"
+yellowColor = "#EAB308"
+orangeColor = "#D95926"
+violetColor = "#9085E9"
+dataframeBorderColor = "#27272A"
+dataframeHeaderBackgroundColor = "#18181B"
+
+[theme.dark.sidebar]
+backgroundColor = "#18181B"
+secondaryBackgroundColor = "#27272A"
+codeBackgroundColor = "#27272A"
+textColor = "#FAFAFA"
+borderColor = "#27272A"
+primaryColor = "#E4E4E7"

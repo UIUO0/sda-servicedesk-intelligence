@@ -1,11 +1,12 @@
-"""Neon operational dashboard for ServiceDesk Plus data (Streamlit + Plotly).
+"""Operational dashboard for ServiceDesk Plus data (Streamlit, enterprise style).
 
 Reads the processed tables written by :mod:`pipeline.preprocess` and presents
-operational KPIs and interactive charts with an animated neon theme.
+operational KPIs and charts using native Streamlit components only — theming
+lives in ``.streamlit/config.toml``, no custom CSS or HTML.
 
 Run with::
 
-    streamlit run src/dashboard.py
+    streamlit run insights/dashboard.py
 
 The data-shaping helpers (``load_table``, ``filter_requests``, ``kpis``,
 ``value_counts``, ``volume_over_time``) are pure functions kept apart from the
@@ -13,20 +14,11 @@ Streamlit calls so they can be unit-tested without a running server.
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import pandas as pd
-import plotly.express as px
 
 import config
-from insights.dashboard_theme import (
-    CATEGORICAL,
-    CUSTOM_CSS,
-    STATUS,
-    kpi_card_html,
-    register_plotly_template,
-)
 
 CLOSED_STATUSES = {"Closed", "Resolved"}
 
@@ -117,145 +109,152 @@ def volume_over_time(df: pd.DataFrame, time_col: str = "created_time", freq: str
 def _run() -> None:
     import streamlit as st
 
-    st.set_page_config(page_title="SDA ServiceDesk Intelligence", page_icon="⚡", layout="wide")
-    template = register_plotly_template()
+    st.set_page_config(
+        page_title="ServiceDesk intelligence",
+        page_icon=":material/analytics:",
+        layout="wide",
+    )
 
-    # -- reusable chart helpers (closures over the registered template) -----
-    def bar(df: pd.DataFrame, column: str, title: str, top: int = 12) -> None:
-        st.markdown(f"### {title}")
-        vc = value_counts(df, column, top=top)
-        if vc.empty:
-            st.caption("No data for this view.")
-            return
-        fig = px.bar(vc, x="count", y=column, orientation="h", template=template,
-                     color=column, color_discrete_sequence=CATEGORICAL, text="count")
-        fig.update_layout(showlegend=False, yaxis=dict(categoryorder="total ascending", title=None))
-        fig.update_traces(hovertemplate="%{y}: %{x}<extra></extra>")
-        st.plotly_chart(fig, use_container_width=True)
+    load = st.cache_data(ttl="5m", show_spinner=False)(load_table)
 
-    def donut(df: pd.DataFrame, column: str, title: str) -> None:
-        st.markdown(f"### {title}")
-        vc = value_counts(df, column)
-        if vc.empty:
-            st.caption("No data for this view.")
-            return
-        fig = px.pie(vc, names=column, values="count", hole=0.55, template=template,
-                     color_discrete_sequence=CATEGORICAL)
-        fig.update_traces(textinfo="label+percent", hovertemplate="%{label}: %{value}<extra></extra>")
-        st.plotly_chart(fig, use_container_width=True)
-
-    def kpi_row(cards: list) -> None:
-        cols = st.columns(len(cards))
-        for i, (col, (label, value, glow)) in enumerate(zip(cols, cards)):
-            col.markdown(kpi_card_html(label, value, glow, delay=i * 0.08), unsafe_allow_html=True)
+    # -- reusable building blocks -------------------------------------------
+    def count_chart(df: pd.DataFrame, column: str, title: str, top: int = 12) -> None:
+        with st.container(border=True):
+            st.markdown(f"**{title}**")
+            vc = value_counts(df, column, top=top)
+            if vc.empty:
+                st.caption("No data for this view.")
+                return
+            st.bar_chart(
+                vc, x=column, y="count", horizontal=True, sort=False,
+                x_label="", y_label="", height=max(180, 34 * len(vc)),
+            )
 
     def data_table(df: pd.DataFrame, name: str) -> None:
-        with st.expander("View data table"):
-            st.dataframe(df, use_container_width=True)
-            st.download_button(f"Download {name} CSV", df.to_csv(index=False).encode("utf-8-sig"),
-                               file_name=f"{name}.csv", mime="text/csv", key=f"dl_{name}")
+        with st.expander("Data table", icon=":material/table_chart:"):
+            st.dataframe(df, hide_index=True)
+            st.download_button(
+                "Download CSV",
+                df.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"{name}.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                key=f"dl_{name}",
+            )
 
-    # -- header --
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="neon-title">⚡ ServiceDesk Intelligence</div>', unsafe_allow_html=True)
-    st.markdown('<div class="neon-sub">Operational KPIs · ServiceDesk Plus</div>', unsafe_allow_html=True)
+    # -- header --------------------------------------------------------------
+    st.title("ServiceDesk intelligence")
+    st.caption("Operational overview · ManageEngine ServiceDesk Plus")
 
-    requests = load_table("requests")
+    requests = load("requests")
     if requests is None or requests.empty:
-        st.warning("No processed data found. Run the extractor then `python -m pipeline.preprocess`.")
+        st.warning(
+            "No processed data found. Run the extractor, then `python -m pipeline.preprocess`.",
+            icon=":material/database:",
+        )
         return
 
-    tab_req, tab_prob, tab_chg, tab_proj, tab_sol = st.tabs(
-        ["🎫 Requests", "🛠️ Problems", "🔄 Changes", "📁 Projects", "📚 Solutions (KB)"]
-    )
+    tab_req, tab_prob, tab_chg, tab_proj, tab_sol = st.tabs([
+        ":material/confirmation_number: Requests",
+        ":material/build: Problems",
+        ":material/change_circle: Changes",
+        ":material/folder: Projects",
+        ":material/menu_book: Solutions",
+    ])
 
     # ================= REQUESTS =================
     with tab_req:
-        st.sidebar.header("Filters · Requests")
-        groups = st.sidebar.multiselect("Group", sorted(requests["group"].dropna().unique()))
-        services = st.sidebar.multiselect("Service", sorted(requests["template"].dropna().unique()))
-        statuses = st.sidebar.multiselect("Status", sorted(requests["status"].dropna().unique()))
-        sites = (st.sidebar.multiselect("Site", sorted(requests["site"].dropna().unique()))
-                 if "site" in requests else [])
-        date_range = None
-        if "created_time" in requests and requests["created_time"].notna().any():
-            mn, mx = requests["created_time"].min().date(), requests["created_time"].max().date()
-            picked = st.sidebar.date_input("Created between", (mn, mx), min_value=mn, max_value=mx)
-            if isinstance(picked, tuple) and len(picked) == 2:
-                date_range = picked
+        with st.sidebar:
+            st.subheader("Filters")
+            groups = st.multiselect("Team", sorted(requests["group"].dropna().unique()))
+            services = st.multiselect("Service", sorted(requests["template"].dropna().unique()))
+            statuses = st.multiselect("Status", sorted(requests["status"].dropna().unique()))
+            sites = (st.multiselect("Site", sorted(requests["site"].dropna().unique()))
+                     if "site" in requests else [])
+            date_range = None
+            if "created_time" in requests and requests["created_time"].notna().any():
+                mn = requests["created_time"].min().date()
+                mx = requests["created_time"].max().date()
+                picked = st.date_input("Created between", (mn, mx), min_value=mn, max_value=mx)
+                if isinstance(picked, tuple) and len(picked) == 2:
+                    date_range = picked
 
         df = filter_requests(requests, groups=groups, statuses=statuses, sites=sites,
                              templates=services, date_range=date_range)
         k = kpis(df)
-        kpi_row([
-            ("Total Tickets", k["total"], "cyan"), ("Open", k["open"], "magenta"),
-            ("Closed", k["closed_pct"], "cyan"), ("Overdue (SLA)", k["overdue"], "magenta"),
-            ("Avg Resolution", k["avg_res"], "purple"),
-            ("Services", f'{requests["template"].nunique():,}', "purple"),
-        ])
 
-        st.markdown("### Ticket volume over time")
-        vol = volume_over_time(df, freq="D")
-        if not vol.empty:
-            fig = px.area(vol, x="period", y="count", template=template)
-            fig.update_traces(line_color=CATEGORICAL[0], fillcolor="rgba(57,135,229,0.25)",
-                              mode="lines+markers", hovertemplate="%{x|%d %b}<br>%{y} tickets<extra></extra>")
-            fig.update_layout(xaxis_title=None, yaxis_title=None)
-            st.plotly_chart(fig, use_container_width=True)
+        daily = volume_over_time(df, freq="D")["count"].tolist()
+        with st.container(horizontal=True):
+            st.metric("Total tickets", k["total"], border=True,
+                      chart_data=daily, chart_type="area")
+            st.metric("Open", k["open"], border=True)
+            st.metric("Closed", k["closed_pct"], border=True)
+            st.metric("Overdue (SLA)", k["overdue"], border=True)
+            st.metric("Avg resolution", k["avg_res"], border=True)
+            st.metric("Services", f'{requests["template"].nunique():,}', border=True)
+
+        with st.container(border=True):
+            st.markdown("**Ticket volume over time**")
+            vol = volume_over_time(df, freq="D")
+            if vol.empty:
+                st.caption("No dated tickets in the current selection.")
+            else:
+                st.area_chart(vol, x="period", y="count", x_label="", y_label="", height=260)
 
         c1, c2 = st.columns(2)
         with c1:
-            bar(df, "template", "By service (catalog)")
+            count_chart(df, "template", "By service")
+            count_chart(df, "technician_name", "By technician")
+            count_chart(df, "lang", "Language mix")
         with c2:
-            bar(df, "group", "By team")
-        c3, c4 = st.columns(2)
-        with c3:
-            bar(df, "technician_name", "By technician (workload)")
-        with c4:
-            bar(df, "status", "By status")
-        c5, c6 = st.columns(2)
-        with c5:
-            donut(df, "lang", "Language mix")
-        with c6:
-            bar(df, "site", "By site")
+            count_chart(df, "group", "By team")
+            count_chart(df, "status", "By status")
+            count_chart(df, "site", "By site")
+
         data_table(df, "requests_filtered")
 
     # ================= PROBLEMS =================
     with tab_prob:
-        problems = load_table("problems")
+        problems = load("problems")
         if problems is None or problems.empty:
-            st.info("No problems data yet. Run `python -m pipeline.extract --modules problems` then preprocess.")
+            st.info(
+                "No problems data yet. Run `python -m pipeline.extract --modules problems`, then preprocess.",
+                icon=":material/info:",
+            )
         else:
             resolved = int(problems["status"].isin(CLOSED_STATUSES).sum()) if "status" in problems else 0
             has_res = problems["has_resolution"].fillna(False).mean() * 100 if "has_resolution" in problems else 0
-            kpi_row([
-                ("Total Problems", f"{len(problems):,}", "cyan"),
-                ("Resolved/Closed", f"{resolved:,}", "magenta"),
-                ("With Resolution", f"{has_res:.0f}%", "purple"),
-            ])
+            with st.container(horizontal=True):
+                st.metric("Total problems", f"{len(problems):,}", border=True)
+                st.metric("Resolved or closed", f"{resolved:,}", border=True)
+                st.metric("With usable resolution", f"{has_res:.0f}%", border=True)
             c1, c2 = st.columns(2)
             with c1:
-                bar(problems, "category", "By category")
+                count_chart(problems, "category", "By category")
+                count_chart(problems, "group", "By team")
             with c2:
-                bar(problems, "status", "By status")
-            c3, c4 = st.columns(2)
-            with c3:
-                bar(problems, "group", "By team")
-            with c4:
-                bar(problems, "technician_name", "By technician")
+                count_chart(problems, "status", "By status")
+                count_chart(problems, "technician_name", "By technician")
             data_table(problems, "problems")
 
     # ============ CHANGES / PROJECTS / SOLUTIONS (generic) ============
     def generic_tab(module: str, label: str) -> None:
-        table = load_table(module)
+        table = load(module)
         if table is None or table.empty:
-            st.info(f"No {label} data yet. Run `python -m pipeline.extract --modules {module}` then preprocess.")
+            st.info(
+                f"No {label} data yet. Run `python -m pipeline.extract --modules {module}`, then preprocess.",
+                icon=":material/info:",
+            )
             return
-        kpi_row([("Total", f"{len(table):,}", "cyan"),
-                 ("Columns", f"{table.shape[1]:,}", "purple")])
+        with st.container(horizontal=True):
+            st.metric("Total records", f"{len(table):,}", border=True)
+        cols = st.columns(2)
+        idx = 0
         for col in ("status", "category", "priority", "group", "technician_name"):
             if col in table.columns and table[col].notna().any():
-                bar(table, col, f"By {col.replace('_', ' ')}")
+                with cols[idx % 2]:
+                    count_chart(table, col, f"By {col.replace('_', ' ')}")
+                idx += 1
         data_table(table, module)
 
     with tab_chg:
@@ -263,7 +262,7 @@ def _run() -> None:
     with tab_proj:
         generic_tab("projects", "projects")
     with tab_sol:
-        generic_tab("solutions", "solutions (KB)")
+        generic_tab("solutions", "solutions")
 
 
 if __name__ == "__main__":
