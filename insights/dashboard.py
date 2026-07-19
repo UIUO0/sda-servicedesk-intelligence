@@ -105,9 +105,24 @@ def volume_over_time(df: pd.DataFrame, time_col: str = "created_time", freq: str
     return out
 
 
+def predicted_note(df: pd.DataFrame, column: str) -> Optional[str]:
+    """Disclosure line when a column contains model-predicted values."""
+    src = f"{column}_source"
+    if src in df.columns:
+        n = int((df[src] == "predicted").sum())
+        if n:
+            return f"⚠ {n} of {len(df)} values are model-predicted, not from the system"
+    return None
+
+
 # --- Streamlit app (import guarded so helpers stay testable) ---------------
 def _run() -> None:
+    import subprocess
+    import sys
+
     import streamlit as st
+
+    from pipeline.refresh import read_status
 
     st.set_page_config(
         page_title="ServiceDesk intelligence",
@@ -116,6 +131,11 @@ def _run() -> None:
     )
 
     load = st.cache_data(ttl="5m", show_spinner=False)(load_table)
+
+    def load_best(module: str) -> Optional[pd.DataFrame]:
+        """Prefer the model-enriched table (carries *_source provenance)."""
+        df = load(f"{module}_enriched")
+        return df if df is not None else load(module)
 
     # -- reusable building blocks -------------------------------------------
     def count_chart(df: pd.DataFrame, column: str, title: str, top: int = 12) -> None:
@@ -129,6 +149,9 @@ def _run() -> None:
                 vc, x=column, y="count", horizontal=True, sort=False,
                 x_label="", y_label="", height=max(180, 34 * len(vc)),
             )
+            note = predicted_note(df, column)
+            if note:
+                st.caption(note)
 
     def data_table(df: pd.DataFrame, name: str) -> None:
         with st.expander("Data table", icon=":material/table_chart:"):
@@ -146,10 +169,45 @@ def _run() -> None:
     st.title("ServiceDesk intelligence")
     st.caption("Operational overview · ManageEngine ServiceDesk Plus")
 
-    requests = load("requests")
+    # -- data refresh (sidebar) ----------------------------------------------
+    with st.sidebar:
+        st.subheader("Data")
+        status = read_status()
+        state = status.get("state")
+        refreshing = state == "running"
+        if refreshing:
+            st.caption(f":material/progress_activity: Refreshing — step: {status.get('step') or '…'}")
+        elif state == "done" and status.get("finished"):
+            stamp = pd.to_datetime(status["finished"]).strftime("%b %d, %H:%M")
+            st.caption(f":material/check_circle: Last refresh: {stamp} UTC")
+        elif state == "failed":
+            st.caption(f":material/error: Last refresh failed: {str(status.get('error'))[:90]}")
+
+        if st.button("Refresh data", icon=":material/refresh:", disabled=refreshing):
+            config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            log = open(config.DATA_DIR / "refresh.log", "ab")
+            subprocess.Popen(
+                [sys.executable, "-m", "pipeline.refresh"],
+                cwd=str(config.PROJECT_ROOT), stdout=log, stderr=subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            st.toast("Refresh started in the background. This can take a while "
+                     "(the server throttles bulk listing).")
+            import time as _time
+            _time.sleep(1.5)  # let the child write its status file before rerun
+            st.rerun()
+
+        # When a refresh lands, drop cached tables once so new data shows up.
+        if state == "done" and status.get("finished") and \
+                st.session_state.get("_seen_refresh") != status["finished"]:
+            st.session_state["_seen_refresh"] = status["finished"]
+            load.clear()
+
+    requests = load_best("requests")
     if requests is None or requests.empty:
         st.warning(
-            "No processed data found. Run the extractor, then `python -m pipeline.preprocess`.",
+            "No processed data found. Use the **Refresh data** button, or run "
+            "`python -m pipeline.refresh` from a terminal.",
             icon=":material/database:",
         )
         return
@@ -205,6 +263,7 @@ def _run() -> None:
         with c1:
             count_chart(df, "template", "By service")
             count_chart(df, "technician_name", "By technician")
+            count_chart(df, "priority", "By priority")
             count_chart(df, "lang", "Language mix")
         with c2:
             count_chart(df, "group", "By team")
@@ -215,7 +274,7 @@ def _run() -> None:
 
     # ================= PROBLEMS =================
     with tab_prob:
-        problems = load("problems")
+        problems = load_best("problems")
         if problems is None or problems.empty:
             st.info(
                 "No problems data yet. Run `python -m pipeline.extract --modules problems`, then preprocess.",
@@ -231,6 +290,7 @@ def _run() -> None:
             c1, c2 = st.columns(2)
             with c1:
                 count_chart(problems, "category", "By category")
+                count_chart(problems, "priority", "By priority")
                 count_chart(problems, "group", "By team")
             with c2:
                 count_chart(problems, "status", "By status")

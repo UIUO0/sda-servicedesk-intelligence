@@ -11,7 +11,6 @@ import json
 import logging
 import time
 from typing import Any, Dict, Iterator, List, Optional
-from urllib.parse import quote
 
 import requests
 
@@ -21,6 +20,15 @@ logger = logging.getLogger(__name__)
 
 # Transient statuses worth retrying with back-off.
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+# SDP's own anti-scraping throttle on the list/pagination endpoint reports as
+# HTTP 400 with this app-level status_code — distinct from a genuine bad
+# request, which must NOT be retried. Empirically it clears within minutes, so
+# it gets a much longer, separate back-off budget than transient network errors.
+_THROTTLE_APP_STATUS_CODE = 4001
+_THROTTLE_MAX_RETRIES = 8
+_THROTTLE_BASE_WAIT = 30.0
+_THROTTLE_MAX_WAIT = 300.0
 
 
 class SDPClient:
@@ -57,13 +65,18 @@ class SDPClient:
         """GET ``{base_url}{path}`` with retry/back-off. Returns parsed JSON."""
         url = f"{self.base_url}{path}"
         last_exc: Optional[Exception] = None
+        attempt = 0
+        throttle_attempt = 0
 
-        for attempt in range(1, self.max_retries + 1):
+        while True:
             try:
                 resp = self.session.get(
                     url, params=params, timeout=self.timeout, verify=self.verify_ssl
                 )
             except requests.RequestException as exc:  # network-level failure
+                attempt += 1
+                if attempt > self.max_retries:
+                    raise RuntimeError(f"GET {url} failed after {self.max_retries} retries") from exc
                 last_exc = exc
                 wait = self._backoff(attempt)
                 logger.warning("GET %s failed (%s); retry %d/%d in %.1fs",
@@ -77,7 +90,22 @@ class SDPClient:
                     "Check SDP_AUTHTOKEN and the technician's permissions."
                 )
 
+            if self._is_throttled(resp):
+                throttle_attempt += 1
+                if throttle_attempt > _THROTTLE_MAX_RETRIES:
+                    resp.raise_for_status()
+                wait = min(_THROTTLE_BASE_WAIT * (2 ** (throttle_attempt - 1)), _THROTTLE_MAX_WAIT)
+                logger.warning(
+                    "GET %s throttled by SDP (page access limit); cooling down %.0fs (attempt %d/%d)",
+                    url, wait, throttle_attempt, _THROTTLE_MAX_RETRIES,
+                )
+                time.sleep(wait)
+                continue
+
             if resp.status_code in _RETRYABLE_STATUS:
+                attempt += 1
+                if attempt > self.max_retries:
+                    resp.raise_for_status()
                 wait = self._retry_after(resp) or self._backoff(attempt)
                 logger.warning("GET %s -> %d; retry %d/%d in %.1fs",
                                url, resp.status_code, attempt, self.max_retries, wait)
@@ -89,7 +117,24 @@ class SDPClient:
                 time.sleep(self.rate_limit_sleep)
             return resp.json()
 
-        raise RuntimeError(f"GET {url} failed after {self.max_retries} retries") from last_exc
+    @staticmethod
+    def _is_throttled(resp: requests.Response) -> bool:
+        """True for SDP's "page access limit exceeded" throttle (reports as HTTP 400).
+
+        Distinguishes this from a genuine bad request, which must propagate
+        immediately rather than being retried.
+        """
+        if resp.status_code != 400:
+            return False
+        try:
+            body = resp.json()
+        except ValueError:
+            return False
+        messages = (body.get("response_status") or {}).get("messages") or []
+        return any(
+            isinstance(m, dict) and m.get("status_code") == _THROTTLE_APP_STATUS_CODE
+            for m in messages
+        )
 
     @staticmethod
     def _backoff(attempt: int) -> float:
@@ -108,9 +153,13 @@ class SDPClient:
 
     @staticmethod
     def _input_data(list_info: Dict[str, Any]) -> Dict[str, str]:
-        """Build the URL-safe ``input_data`` query param the list API expects."""
+        """Build the ``input_data`` query param the list API expects.
+
+        Returns the raw JSON string; ``requests`` URL-encodes ``params``
+        values itself, so encoding here too would double-encode it.
+        """
         payload = json.dumps({"list_info": list_info}, separators=(",", ":"))
-        return {"input_data": quote(payload)}
+        return {"input_data": payload}
 
     # -- public API --------------------------------------------------------
     def list_records(

@@ -8,3 +8,4 @@ seaborn>=0.13
 tqdm>=4.66
 streamlit>=1.30
 plotly>=5.18
+scikit-learn>=1.4

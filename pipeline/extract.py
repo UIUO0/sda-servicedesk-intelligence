@@ -41,12 +41,17 @@ class ModuleSpec:
 
 # The module table. Ticket-like modules carry rich text + conversations; the
 # reference modules are small lookup tables pulled list-only.
+#
+# NOTE: the "_attachments" sub-resource does not exist on this SDP instance
+# (confirmed: GET .../{id}/_attachments -> 404). Attachment metadata is
+# already embedded in the detail body itself (an "attachments" list plus a
+# "has_attachments" flag), so no separate call is needed.
 MODULES: Dict[str, ModuleSpec] = {
-    "requests": ModuleSpec("requests", subresources=("notes", "_attachments"), has_details=True),
-    "problems": ModuleSpec("problems", subresources=("notes", "_attachments"), has_details=True),
-    "changes": ModuleSpec("changes", subresources=("notes", "_attachments"), has_details=True),
-    "projects": ModuleSpec("projects", subresources=("_attachments",), has_details=True),
-    "solutions": ModuleSpec("solutions", subresources=("_attachments",), has_details=True),
+    "requests": ModuleSpec("requests", subresources=("notes",), has_details=True),
+    "problems": ModuleSpec("problems", subresources=("notes",), has_details=True),
+    "changes": ModuleSpec("changes", subresources=("notes",), has_details=True),
+    "projects": ModuleSpec("projects", has_details=True),
+    "solutions": ModuleSpec("solutions", has_details=True),
     # Reference / lookup tables (list-only).
     "requesters": ModuleSpec("requesters"),
     "technicians": ModuleSpec("technicians"),

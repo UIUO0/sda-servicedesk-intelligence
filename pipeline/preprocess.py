@@ -212,13 +212,16 @@ def _count_notes(bundle: Dict[str, Any]) -> Optional[int]:
     return None
 
 
-def _count_attachments(bundle: Dict[str, Any]) -> Optional[int]:
-    atts = bundle.get("_attachments")
-    if isinstance(atts, dict):
-        for value in atts.values():
-            if isinstance(value, list):
-                return len(value)
-    return None
+def _count_attachments(payload: Dict[str, Any]) -> Optional[int]:
+    """Count attachments from the "attachments" list embedded in the detail body.
+
+    SDP has no separate attachments sub-resource on this instance (confirmed
+    404); attachment metadata ships inline with the record detail instead.
+    """
+    if not isinstance(payload, dict):
+        return None
+    atts = payload.get("attachments")
+    return len(atts) if isinstance(atts, list) else None
 
 
 def enrich_from_details(module: str, rows: List[Dict[str, Any]]) -> None:
@@ -232,9 +235,9 @@ def enrich_from_details(module: str, rows: List[Dict[str, Any]]) -> None:
             continue
         bundle = json.loads(detail_path.read_text(encoding="utf-8"))
         row["notes_count"] = _count_notes(bundle)
-        row["attachments_count"] = _count_attachments(bundle)
         detail = bundle.get("detail", {})
         payload = detail.get(module[:-1]) if isinstance(detail, dict) else None
+        row["attachments_count"] = _count_attachments(payload)
         if isinstance(payload, dict):
             full_desc = clean_html(payload.get("description"))
             if full_desc:

@@ -44,8 +44,24 @@ def _get_float(name: str, default: float) -> float:
     return float(raw)
 
 
+def _normalize_base_url(raw: str) -> str:
+    """Strip a trailing slash and an accidental /api/v3 suffix.
+
+    sdp_client.py always appends "/api/v3/{module}" itself, so the base URL
+    must be the server root. Users copying the URL from SDP's own API docs
+    naturally include "/api/v3" — strip it here rather than requiring every
+    caller to remember the distinction.
+    """
+    url = raw.strip().rstrip("/")
+    for suffix in ("/api/v3", "/API/V3"):
+        if url.lower().endswith(suffix.lower()):
+            url = url[: -len(suffix)]
+            break
+    return url
+
+
 # Connection settings -------------------------------------------------------
-BASE_URL = (os.getenv("SDP_BASE_URL") or "").rstrip("/")
+BASE_URL = _normalize_base_url(os.getenv("SDP_BASE_URL") or "")
 AUTHTOKEN = os.getenv("SDP_AUTHTOKEN") or ""
 VERIFY_SSL = _get_bool("SDP_VERIFY_SSL", False)
 ROW_COUNT = min(_get_int("SDP_ROW_COUNT", 100), 100)  # server hard cap is 100

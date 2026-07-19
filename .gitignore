@@ -13,6 +13,9 @@ insights/*.png
 insights/summary.md
 insights/eda_summary.md
 
+# Trained model artifacts (TF-IDF vocabularies embed ticket-text fragments)
+models/artifacts/
+
 # Python
 venv/
 .venv/
