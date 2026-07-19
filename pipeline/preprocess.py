@@ -242,9 +242,11 @@ def enrich_from_details(module: str, rows: List[Dict[str, Any]]) -> None:
             full_desc = clean_html(payload.get("description"))
             if full_desc:
                 row["description"] = full_desc
-            if payload.get("resolution"):
-                res = pick(payload.get("resolution"), "content") or payload.get("resolution")
-                row["resolution"] = clean_html(res) if isinstance(res, str) else res
+            res = payload.get("resolution")
+            if isinstance(res, dict):  # API wraps it: {"content": ..., "resolution_attachments": []}
+                res = res.get("content")
+            if isinstance(res, str) and res:
+                row["resolution"] = clean_html(res)
 
 
 # --- loading ---------------------------------------------------------------
@@ -327,7 +329,19 @@ def _discover_modules() -> List[str]:
 
 def main(argv: Optional[List[str]] = None) -> None:
     args = parse_args(argv)
-    anon = Anonymizer() if args.anonymize else None
+    anon = None
+    if args.anonymize:
+        # Reuse the stored salt so surrogates stay identical across runs —
+        # otherwise re-processing one module would break cross-table joins
+        # between anon twins produced in different runs.
+        map_path = config.PROCESSED_DIR / ".anon_map.json"
+        salt = None
+        if map_path.exists():
+            try:
+                salt = json.loads(map_path.read_text(encoding="utf-8")).get("salt")
+            except (json.JSONDecodeError, OSError):
+                salt = None
+        anon = Anonymizer(salt)
 
     def emit(df: pd.DataFrame, module: str) -> None:
         """Write the identifiable table plus, when asked, an anonymised twin."""

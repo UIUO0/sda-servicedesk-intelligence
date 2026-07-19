@@ -52,9 +52,24 @@ class Anonymizer:
         return text
 
     def save_map(self, path: Path) -> None:
+        """Persist salt + mapping, merging with any earlier runs' entries.
+
+        Merging keeps the re-identification reference complete when single
+        modules are re-processed (same salt -> same surrogates, so entries
+        from previous runs stay valid).
+        """
+        merged: Dict[str, str] = {}
+        if path.exists():
+            try:
+                stored = json.loads(path.read_text(encoding="utf-8"))
+                if stored.get("salt") == self.salt:
+                    merged = dict(stored.get("map") or {})
+            except (json.JSONDecodeError, OSError):
+                pass
+        merged.update(self._map)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            json.dumps({"salt": self.salt, "map": self._map}, ensure_ascii=False, indent=2),
+            json.dumps({"salt": self.salt, "map": merged}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 

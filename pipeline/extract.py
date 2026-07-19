@@ -52,10 +52,12 @@ MODULES: Dict[str, ModuleSpec] = {
     "changes": ModuleSpec("changes", subresources=("notes",), has_details=True),
     "projects": ModuleSpec("projects", has_details=True),
     "solutions": ModuleSpec("solutions", has_details=True),
-    # Reference / lookup tables (list-only).
-    "requesters": ModuleSpec("requesters"),
+    # Reference / lookup tables (list-only). Endpoint names verified against
+    # this SDP build: it exposes "users" (not "requesters") and
+    # "support_groups" (not "groups").
+    "users": ModuleSpec("users"),
     "technicians": ModuleSpec("technicians"),
-    "groups": ModuleSpec("groups"),
+    "support_groups": ModuleSpec("support_groups"),
     "categories": ModuleSpec("categories"),
     "sites": ModuleSpec("sites"),
 }
@@ -137,10 +139,14 @@ def run(
     for name in modules:
         spec = MODULES[name]
         logger.info("=== Extracting %s ===", name)
-        record_ids, stats = extract_list(client, spec, limit)
-
-        if spec.has_details and not skip_details:
-            extract_details(client, spec, record_ids, stats, skip_notes=skip_notes)
+        try:
+            record_ids, stats = extract_list(client, spec, limit)
+            if spec.has_details and not skip_details:
+                extract_details(client, spec, record_ids, stats, skip_notes=skip_notes)
+        except Exception as exc:  # one broken module must not sink the rest
+            stats = ExtractStats()
+            stats.errors.append(f"{name}: {exc}")
+            logger.error("[%s] failed: %s — continuing with remaining modules", name, exc)
 
         results[name] = stats
         logger.info(
