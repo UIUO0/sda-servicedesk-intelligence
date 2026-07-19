@@ -8,10 +8,11 @@ data/
 apiResponse*.json
 *_raw.json
 
-# Generated insight artefacts (may embed PII in labels)
+# Generated insight artefacts (may embed PII in labels / free-text signatures)
 insights/*.png
 insights/summary.md
 insights/eda_summary.md
+insights/semantic_search_eval.md
 
 # Trained model artifacts (TF-IDF vocabularies embed ticket-text fragments)
 models/artifacts/
