@@ -105,14 +105,19 @@ def volume_over_time(df: pd.DataFrame, time_col: str = "created_time", freq: str
     return out
 
 
-def predicted_note(df: pd.DataFrame, column: str) -> Optional[str]:
-    """Disclosure line when a column contains model-predicted values."""
+def split_predicted(df: pd.DataFrame, column: str) -> tuple:
+    """Return (system-only rows, number of excluded predicted rows) for a column.
+
+    Charts must never mix model-predicted values with system data — a footnote
+    is not enough to stop a chart from misleading. Predictions stay available
+    in the data table / exported CSV, clearly flagged by ``{column}_source``.
+    """
     src = f"{column}_source"
-    if src in df.columns:
-        n = int((df[src] == "predicted").sum())
-        if n:
-            return f"⚠ {n} of {len(df)} values are model-predicted, not from the system"
-    return None
+    if src not in df.columns:
+        return df, 0
+    mask = df[src].eq("predicted")
+    excluded = int(mask.sum())
+    return (df[~mask], excluded) if excluded else (df, 0)
 
 
 # --- Streamlit app (import guarded so helpers stay testable) ---------------
@@ -141,7 +146,8 @@ def _run() -> None:
     def count_chart(df: pd.DataFrame, column: str, title: str, top: int = 12) -> None:
         with st.container(border=True):
             st.markdown(f"**{title}**")
-            vc = value_counts(df, column, top=top)
+            plot_df, excluded = split_predicted(df, column)
+            vc = value_counts(plot_df, column, top=top)
             if vc.empty:
                 st.caption("No data for this view.")
                 return
@@ -149,9 +155,12 @@ def _run() -> None:
                 vc, x=column, y="count", horizontal=True, sort=False,
                 x_label="", y_label="", height=max(180, 34 * len(vc)),
             )
-            note = predicted_note(df, column)
-            if note:
-                st.caption(note)
+            if excluded:
+                st.caption(
+                    f"System-entered values only ({len(plot_df):,} of {len(df):,} records). "
+                    f"{excluded:,} model-predicted values are excluded from this chart "
+                    "and available in the data table."
+                )
 
     def data_table(df: pd.DataFrame, name: str) -> None:
         with st.expander("Data table", icon=":material/table_chart:"):
