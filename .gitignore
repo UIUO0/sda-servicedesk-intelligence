@@ -30,3 +30,10 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+insights/recurring_issues.md
+insights/clustering_eyeball.md
+insights/routing_eval.md
+insights/forecast_eval.md
+data/processed/requests_clusters.parquet
+data/processed/forecast.parquet

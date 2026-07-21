@@ -221,9 +221,10 @@ def _run() -> None:
         )
         return
 
-    tab_req, tab_prob, tab_chg, tab_proj, tab_sol = st.tabs([
+    tab_req, tab_prob, tab_ml, tab_chg, tab_proj, tab_sol = st.tabs([
         ":material/confirmation_number: Requests",
         ":material/build: Problems",
+        ":material/neurology: Intelligence",
         ":material/change_circle: Changes",
         ":material/folder: Projects",
         ":material/menu_book: Solutions",
@@ -325,6 +326,10 @@ def _run() -> None:
                     count_chart(table, col, f"By {col.replace('_', ' ')}")
                 idx += 1
         data_table(table, module)
+
+    with tab_ml:
+        from insights.ml_tab import render as render_ml
+        render_ml(st)
 
     with tab_chg:
         generic_tab("changes", "changes")
