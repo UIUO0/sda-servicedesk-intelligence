@@ -1,6 +1,6 @@
 """App 3 — daily ticket-volume forecasting per team + overall.
 
-Prophet with Saudi holidays/Ramadan (they break the weekly seasonality),
+Prophet with regional holidays/Ramadan (they break the weekly seasonality),
 evaluated against an honest baseline: "same weekday last week". Per the
 reviewer's rule, if Prophet does not beat the naive baseline by a clear MAPE
 margin, the report says so plainly and the naive/known-peak view is what the
@@ -53,7 +53,7 @@ def daily_series(group: Optional[str] = None) -> pd.DataFrame:
     return pd.DataFrame({"ds": daily.index, "y": daily.values})
 
 
-def saudi_holidays() -> pd.DataFrame:
+def regional_holidays() -> pd.DataFrame:
     """Ramadan windows + Eids + National Day — they break weekly seasonality.
 
     Approximate civil dates (Ramadan/Eid drift ~11 days/yr); good enough to let
@@ -96,7 +96,7 @@ def naive_forecast(train: pd.DataFrame, horizon: int) -> np.ndarray:
 
 def prophet_forecast(train: pd.DataFrame, horizon: int):
     from prophet import Prophet
-    m = Prophet(holidays=saudi_holidays(), weekly_seasonality=True,
+    m = Prophet(holidays=regional_holidays(), weekly_seasonality=True,
                 yearly_seasonality=True, daily_seasonality=False,
                 seasonality_mode="multiplicative")
     import logging as _lg
@@ -148,7 +148,7 @@ def _write_report(payload: Dict) -> None:
         f"daily level, {payload['horizon_days']}-day holdout, Prophet vs. "
         f"naive (same weekday last week)*",
         "",
-        "Prophet uses Saudi holidays + Ramadan (they break weekly seasonality). "
+        "Prophet uses regional holidays + Ramadan (they break weekly seasonality). "
         f"Prophet is only preferred when it beats the naive baseline by ≥ {payload['min_edge']:.0%} "
         "relative MAPE — otherwise the naive baseline + the known Sunday peak are enough.",
         "",

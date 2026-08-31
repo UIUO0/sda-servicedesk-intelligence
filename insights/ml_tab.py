@@ -120,7 +120,7 @@ def _forecast_section(st) -> None:
     st.markdown("**Weekly pattern — the reliable signal (from history, no model)**")
     wk = pd.DataFrame({"day": list(WEEKDAY_PATTERN), "avg tickets/day": list(WEEKDAY_PATTERN.values())})
     st.bar_chart(wk, x="day", y="avg tickets/day", sort=False, x_label="", y_label="", height=220)
-    st.caption("Sunday is the weekly peak; Friday/Saturday are near-zero (Saudi weekend). "
+    st.caption("Sunday is the weekly peak; Friday/Saturday are near-zero (regional weekend). "
                "This seasonality is stable and is what capacity planning should use.")
 
     fc_path = config.PROCESSED_DIR / "forecast.parquet"
@@ -134,7 +134,7 @@ def _forecast_section(st) -> None:
         st.line_chart(chart[["forecast", "low", "high"]], height=240)
         if metrics:
             worst = max(r["prophet_mape"] for r in metrics["results"])
-            st.caption(f"Prophet with Saudi holidays/Ramadan. Daily error is high "
+            st.caption(f"Prophet with regional holidays/Ramadan. Daily error is high "
                        f"(MAPE up to {worst:.0%}) and Prophet only beats the naive baseline on "
                        f"{sum(r['winner']=='prophet' for r in metrics['results'])} of "
                        f"{len(metrics['results'])} series — so this is indicative, not precise. "
